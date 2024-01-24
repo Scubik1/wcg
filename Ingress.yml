@@ -15,4 +15,4 @@ spec:
           service:
             name: wcg-svc
             port:
-              number: 8888
+              number: 80
