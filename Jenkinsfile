@@ -2,8 +2,11 @@ pipeline {
     agent any
     //options { timestamps() }
     environment {
-        DOCKERHUB_CREDENTIALS= credentials('dockerhub')
+        DOCKERHUB_CRED= credentials('dockerhub')
         APPNAME='wcg'
+        K8S_URL='https://192.168.59.100:8443/'
+        k8S_CRED='kubernetis'
+        
     }
     stages{
         stage('Get code') {
@@ -23,14 +26,14 @@ pipeline {
         stage('Build') {
             steps {
                 sh '''
-                    docker build -t $DOCKERHUB_CREDENTIALS_USR/$APPNAME .
+                    docker build -t $DOCKERHUB_CRED_USR/$APPNAME .
                 '''
             }
         }
         stage('Test') {
             steps {
                 sh '''
-                    docker run --rm --name wcg -d -p 8888:8888 $DOCKERHUB_CREDENTIALS_USR/$APPNAME
+                    docker run --rm --name wcg -d -p 8888:8888 $DOCKERHUB_CRED_USR/$APPNAME
                     res=`curl http://127.0.0.1:8888/version`
                     if [ "{ \\"version\\": \\"1.DEVELOPMENT\\" }" != "$res" ]; then
                       docker stop wcg
@@ -43,9 +46,8 @@ pipeline {
         stage('Push image') {
             steps {
                 sh '''
-                    echo $DOCKERHUB_CREDENTIALS_PSW
-                    echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin
-                    docker push $DOCKERHUB_CREDENTIALS_USR/$APPNAME:latest
+                    echo $DOCKERHUB_CRED_PSW | docker login -u $DOCKERHUB_CRED_USR --password-stdin
+                    docker push $DOCKERHUB_CRED_USR/$APPNAME:latest
                     docker logout
                 '''
             }
@@ -56,9 +58,9 @@ pipeline {
                     caCertificate: '',
                     clusterName: 'minikube',
                     contextName: 'minikube',
-                    credentialsId: 'kubernetis',
+                    credentialsId: "$K8S_CRED",
                     namespace: 'pre-production',
-                    serverUrl: 'https://192.168.59.100:8443/'
+                    serverUrl: "$K8S_URL"
                     ]]) {
                         sh '''
                            curl -LO https://dl.k8s.io/release/v1.29.1/bin/linux/amd64/kubectl
@@ -81,9 +83,9 @@ pipeline {
                     caCertificate: '',
                     clusterName: 'minikube',
                     contextName: 'minikube',
-                    credentialsId: 'kubernetis',
+                    credentialsId: "$K8S_CRED",
                     namespace: 'pre-production',
-                    serverUrl: 'https://192.168.59.100:8443/'
+                    serverUrl: "$K8S_URL"
                     ]]) {
                         sh '''
                            ./kubectl delete -f .
@@ -93,14 +95,14 @@ pipeline {
         }
         stage('Deploy production') {
             steps {
-                input 'Deploy to Production?'
+                input 'Deployment to pre-production was successful. Test passed. Deploy to Production?'
                 withKubeCredentials(kubectlCredentials: [[
                     caCertificate: '',
                     clusterName: 'minikube',
                     contextName: 'minikube',
-                    credentialsId: 'k8sprod',
+                    credentialsId: "$K8S_CRED",
                     namespace: 'production',
-                    serverUrl: 'https://192.168.59.100:8443/'
+                    serverUrl: "$K8S_URL"
                     ]]) {
                         sh '''
                            ./kubectl create -f .
